@@ -203,6 +203,9 @@ while IFS=' ' read -r hash date; do
 	stagingMerges+=$'\n'
 done < data/staging-history
 
+echo "Finding PRs..."
+./scripts/fetch-prs.py > data/prcache.csv
+
 echo "Rendering maintainer pages..."
 runRust maintainer_pages "${evalIds[@]}"
 
