@@ -13,7 +13,10 @@ fi
 runRust() {
 	bin="${1}"
 	shift
-	RUST_LOG=info nix-shell -p openssl pkg-config --run "cargo r --bin ${bin} --quiet --release -- ${*}"
+    nix-shell -p openssl pkg-config --run "
+        export LD_LIBRARY_PATH=\${LD_LIBRARY_PATH:+\$LD_LIBRARY_PATH:}\$(pkg-config --variable=libdir openssl)
+        RUST_LOG=info cargo r --bin ${bin} --quiet --release -- ${*}
+    "
 }
 
 # Gather data
