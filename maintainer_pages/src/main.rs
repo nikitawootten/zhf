@@ -13,6 +13,43 @@ struct Build {
     maintainer: String,
 }
 
+struct PullRequest {
+    title: String,
+    link: String,
+    merged: bool,
+}
+
+fn find_related_prs<'a>(
+    build_name: &str,
+    pull_requests: &'a [PullRequest],
+) -> Vec<&'a PullRequest> {
+    // Extract package name without version (e.g., "heimer-4.5.0" -> "heimer")
+    // Find the last occurrence of '-' followed by a digit
+    let package_name = build_name
+        .char_indices()
+        .rev()
+        .find(|(_, c)| *c == '-')
+        .and_then(|(idx, _)| {
+            // Check if character after '-' is a digit
+            if build_name
+                .chars()
+                .nth(idx + 1)
+                .map_or(false, |c| c.is_ascii_digit())
+            {
+                Some(&build_name[..idx])
+            } else {
+                None
+            }
+        })
+        .unwrap_or(build_name);
+
+    let search_pattern = format!("{}: ", package_name);
+    pull_requests
+        .iter()
+        .filter(|pr| pr.title.starts_with(&search_pattern))
+        .collect()
+}
+
 fn main() -> Result<()> {
     env_logger::builder().format_timestamp(None).init();
     // Handle args
@@ -32,6 +69,26 @@ fn main() -> Result<()> {
     out_dir.push("failed");
     out_dir.push("by-maintainer");
     create_dir_all(&out_dir)?;
+
+    // Read PR cache
+    let mut prcache_path = data_dir.clone();
+    prcache_path.push("prcache.csv");
+    let prcache_content = read_to_string(prcache_path)?;
+    let mut pull_requests: Vec<PullRequest> = Vec::new();
+
+    for (idx, line) in prcache_content.split('\n').enumerate() {
+        if idx == 0 || line.is_empty() {
+            continue; // Skip header and empty lines
+        }
+        let parts: Vec<&str> = line.splitn(4, ',').collect();
+        if parts.len() >= 3 {
+            pull_requests.push(PullRequest {
+                title: parts[0].to_string(),
+                link: parts[1].to_string(),
+                merged: parts[2] == "true",
+            });
+        }
+    }
 
     // Read the cache
     let mut maintainers: HashMap<String, Vec<Build>> = HashMap::new();
@@ -112,7 +169,7 @@ fn main() -> Result<()> {
             <h2 id="direct">Direct failures</h2>
             <p>These are packages fail to build themselves.</p>
             <table>
-              <thead><tr><th>Attribute</th><th>Job name</th><th>Platform</th><th>Result</th></th></thead>
+              <thead><tr><th>Attribute</th><th>Job name</th><th>Platform</th><th>Result</th><th>Related PRs</th></tr></thead>
               <tbody>"#))?;
         // Table for direct failures
         let mut found = false;
@@ -124,11 +181,26 @@ fn main() -> Result<()> {
                 continue;
             }
             found = true;
-            out.write_fmt(format_args!("<tr><td><a href=\"https://hydra.nixos.org/build/{}\">{}</a></td><td>{}</td><td>{}</td><td>{}</td></tr>", build.build_id, build.attr, build.name, build.arch, build.status))?;
+
+            let related_prs = find_related_prs(&build.name, &pull_requests);
+            let pr_links: String = if related_prs.is_empty() {
+                String::from("-")
+            } else {
+                related_prs
+                    .iter()
+                    .map(|pr| {
+                        let merged_label = if pr.merged { " (Merged)" } else { "" };
+                        format!("<a href=\"{}\">{}</a>{}", pr.link, pr.title, merged_label)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("<br>")
+            };
+
+            out.write_fmt(format_args!("<tr><td><a href=\"https://hydra.nixos.org/build/{}\">{}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>", build.build_id, build.attr, build.name, build.arch, build.status, pr_links))?;
         }
         if !found {
             out.write_fmt(format_args!(
-                r#"<tr><td colspan="4" class="none">None 🎉</td></tr>"#
+                r#"<tr><td colspan="5" class="none">None 🎉</td></tr>"#
             ))?;
         }
         // Middle between the two tables
