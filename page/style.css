@@ -79,6 +79,16 @@ tbody td.none {
 	font-size: x-large;
 }
 
+/* Callout box */
+
+.callout {
+	padding: 1rem 1.5rem;
+	margin: 1.5rem 0;
+	border-left: 4px solid #6586c8;
+	background-color: rgba(101, 134, 200, 0.08);
+	border-radius: 4px;
+}
+
 /* Landing page */
 div#burndown-container {
 	position: relative;
@@ -122,4 +132,8 @@ body#maintainer-overview li {
 		color: #007bff;
 	}
 
+	.callout {
+		background-color: rgba(101, 134, 200, 0.15);
+		border-left-color: #7a9ad6;
+	}
 }
